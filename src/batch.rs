@@ -4,9 +4,23 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
 
 use crate::core::charset::{self, EncodingInfo};
 use crate::core::detect;
+
+/// 后台批量任务的进度事件。
+#[derive(Debug)]
+pub enum BatchEvent {
+    /// 第 `index` 个文件处理完成
+    Item { index: usize, item: BatchItem },
+    /// 全部完成，附带统计
+    Finished {
+        done: usize,
+        skipped: usize,
+        failed: usize,
+    },
+}
 
 /// 单个文件的处理状态。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -138,6 +152,39 @@ where
         progress(index + 1, total);
     }
     ok
+}
+
+/// 在后台线程里执行批量转码，通过 channel 汇报进度；每处理完一个文件调用一次 `notify`
+/// 以便界面及时重绘。返回接收端，调用方在 UI 循环里非阻塞地收取事件。
+pub fn spawn(
+    items: Vec<BatchItem>,
+    options: BatchOptions,
+    notify: impl Fn() + Send + 'static,
+) -> mpsc::Receiver<BatchEvent> {
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || {
+        let (mut done, mut skipped, mut failed) = (0usize, 0usize, 0usize);
+        for (index, mut item) in items.into_iter().enumerate() {
+            process_item(&mut item, &options);
+            match item.status {
+                ItemStatus::Done => done += 1,
+                ItemStatus::Skipped => skipped += 1,
+                ItemStatus::Failed => failed += 1,
+                ItemStatus::Pending => {}
+            }
+            if sender.send(BatchEvent::Item { index, item }).is_err() {
+                return; // 界面已关闭，提前退出
+            }
+            notify();
+        }
+        let _ = sender.send(BatchEvent::Finished {
+            done,
+            skipped,
+            failed,
+        });
+        notify();
+    });
+    receiver
 }
 
 fn process_item(item: &mut BatchItem, options: &BatchOptions) {

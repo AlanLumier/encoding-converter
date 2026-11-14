@@ -371,6 +371,36 @@ mod tests {
     }
 
     #[test]
+    fn background_spawn_reports_progress_and_finish() {
+        use std::sync::mpsc::RecvTimeoutError;
+        use std::time::Duration;
+
+        let dir = temp_dir();
+        let input = dir.join("spawn.txt");
+        fs::write(&input, "hello").unwrap();
+        let items = vec![BatchItem::new(input)];
+        let receiver = spawn(items, BatchOptions::default(), || {});
+        let mut reported = 0usize;
+        loop {
+            match receiver.recv_timeout(Duration::from_secs(10)) {
+                Ok(BatchEvent::Item { index, item }) => {
+                    assert_eq!(index, 0);
+                    assert_eq!(item.status, ItemStatus::Done);
+                    reported += 1;
+                }
+                Ok(BatchEvent::Finished { done, .. }) => {
+                    assert_eq!(done, 1);
+                    break;
+                }
+                Err(RecvTimeoutError::Timeout) => panic!("后台任务 10 秒内没有完成"),
+                Err(RecvTimeoutError::Disconnected) => panic!("channel 提前断开"),
+            }
+        }
+        assert_eq!(reported, 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn converts_gbk_file_to_utf8() {
         let dir = temp_dir();
         let input = dir.join("a.txt");

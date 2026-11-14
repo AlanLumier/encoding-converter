@@ -3,6 +3,8 @@
 //! 调用方（GUI/CLI/批量任务）只依赖本模块导出的 `list`/`find`/`decode`/`encode`。
 
 pub mod custom;
+pub mod table_codec;
+pub mod tables;
 
 use encoding_rs as ers;
 
@@ -43,6 +45,8 @@ impl Group {
 pub enum Codec {
     Ers(&'static ers::Encoding),
     Custom(custom::CustomCodec),
+    /// 表驱动的单字节代码页（DOS OEM / EBCDIC / 老 Mac）
+    Table(&'static [u16; 256]),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -107,6 +111,24 @@ const fn custom_entry(
     }
 }
 
+const fn table_entry(
+    id: &'static str,
+    name: &'static str,
+    aliases: &'static [&'static str],
+    group: Group,
+    note: &'static str,
+    table: &'static [u16; 256],
+) -> EncodingInfo {
+    EncodingInfo {
+        id,
+        name,
+        aliases,
+        group,
+        note,
+        codec: Codec::Table(table),
+    }
+}
+
 /// 全部已实现的编码。顺序即界面展示顺序（按 Group 升序）。
 pub static LIST: &[EncodingInfo] = &[
     // ---------- Unicode ----------
@@ -161,7 +183,39 @@ pub static LIST: &[EncodingInfo] = &[
     ers_entry("macintosh", "MacRoman", &["macroman", "mac"], Group::Western, "经典 Mac 西欧", ers::MACINTOSH),
     ers_entry("x-mac-cyrillic", "MacCyrillic", &["maccyrillic"], Group::Western, "Mac 西里尔", ers::X_MAC_CYRILLIC),
     ers_entry("ibm866", "IBM866", &["cp866", "866"], Group::Western, "DOS 俄文", ers::IBM866),
-    // ---------- 传统 / 特殊 ----------
+    // ---------- 传统 / 特殊：DOS OEM ----------
+    table_entry("cp437", "CP437（DOS 美式）", &["ibm437", "437"], Group::Legacy, "DOS OEM：美国 / 西欧", &tables::CP437),
+    table_entry("cp720", "CP720（DOS 阿拉伯）", &["ibm720"], Group::Legacy, "DOS OEM：阿拉伯文", &tables::CP720),
+    table_entry("cp737", "CP737（DOS 希腊）", &["ibm737"], Group::Legacy, "DOS OEM：希腊文", &tables::CP737),
+    table_entry("cp775", "CP775（DOS 波罗的海）", &["ibm775"], Group::Legacy, "DOS OEM：波罗的海", &tables::CP775),
+    table_entry("cp850", "CP850（DOS 西欧）", &["ibm850"], Group::Legacy, "DOS OEM：西欧（含 box 绘图符）", &tables::CP850),
+    table_entry("cp852", "CP852（DOS 中欧）", &["ibm852"], Group::Legacy, "DOS OEM：中欧", &tables::CP852),
+    table_entry("cp855", "CP855（DOS 西里尔）", &["ibm855"], Group::Legacy, "DOS OEM：西里尔", &tables::CP855),
+    table_entry("cp857", "CP857（DOS 土耳其）", &["ibm857"], Group::Legacy, "DOS OEM：土耳其文", &tables::CP857),
+    table_entry("cp858", "CP858（DOS 西欧 + €）", &["ibm858"], Group::Legacy, "DOS OEM：CP850 加欧元符号", &tables::CP858),
+    table_entry("cp860", "CP860（DOS 葡萄牙）", &["ibm860"], Group::Legacy, "DOS OEM：葡萄牙文", &tables::CP860),
+    table_entry("cp861", "CP861（DOS 冰岛）", &["ibm861"], Group::Legacy, "DOS OEM：冰岛文", &tables::CP861),
+    table_entry("cp862", "CP862（DOS 希伯来）", &["ibm862"], Group::Legacy, "DOS OEM：希伯来文", &tables::CP862),
+    table_entry("cp863", "CP863（DOS 加拿大法语）", &["ibm863"], Group::Legacy, "DOS OEM：加拿大法语", &tables::CP863),
+    table_entry("cp864", "CP864（DOS 阿拉伯）", &["ibm864"], Group::Legacy, "DOS OEM：阿拉伯文（IBM 变体）", &tables::CP864),
+    table_entry("cp865", "CP865（DOS 北欧）", &["ibm865"], Group::Legacy, "DOS OEM：北欧", &tables::CP865),
+    table_entry("cp869", "CP869（DOS 希腊）", &["ibm869"], Group::Legacy, "DOS OEM：希腊文（IBM）", &tables::CP869),
+    // ---------- 传统 / 特殊：EBCDIC ----------
+    table_entry("ebcdic-037", "EBCDIC 037（美国）", &["cp037", "ibm037"], Group::Legacy, "IBM 大型机：美国 / 加拿大", &tables::EBCDIC_037),
+    table_entry("ebcdic-500", "EBCDIC 500（国际）", &["cp500", "ibm500"], Group::Legacy, "IBM 大型机：国际版", &tables::EBCDIC_500),
+    table_entry("ebcdic-1047", "EBCDIC 1047（开放系统）", &["cp1047", "ibm1047"], Group::Legacy, "IBM 大型机：Unix 开放系统", &tables::EBCDIC_1047),
+    // ---------- 传统 / 特殊：老 Mac ----------
+    table_entry("mac-arabic", "MacArabic", &["macarabic"], Group::Western, "老 Mac 阿拉伯文", &tables::MAC_ARABIC),
+    table_entry("mac-hebrew", "MacHebrew", &["machebrew"], Group::Western, "老 Mac 希伯来文", &tables::MAC_HEBREW),
+    table_entry("mac-greek", "MacGreek", &["macgreek"], Group::Western, "老 Mac 希腊文", &tables::MAC_GREEK),
+    table_entry("mac-romanian", "MacRomanian", &["macromanian"], Group::Western, "老 Mac 罗马尼亚文", &tables::MAC_ROMANIAN),
+    table_entry("mac-ukrainian", "MacUkrainian", &["macukraine"], Group::Western, "老 Mac 乌克兰文", &tables::MAC_UKRAINIAN),
+    table_entry("mac-thai", "MacThai", &["macthai"], Group::Western, "老 Mac 泰文", &tables::MAC_THAI),
+    table_entry("mac-central-europe", "MacCentralEurope", &["maccentraleurope", "maccentraleuropean"], Group::Western, "老 Mac 中欧", &tables::MAC_CENTRAL_EUROPE),
+    table_entry("mac-icelandic", "MacIcelandic", &["maciceland"], Group::Western, "老 Mac 冰岛文", &tables::MAC_ICELANDIC),
+    table_entry("mac-turkish", "MacTurkish", &["macturkish"], Group::Western, "老 Mac 土耳其文", &tables::MAC_TURKISH),
+    table_entry("mac-croatian", "MacCroatian", &["maccroatian"], Group::Western, "老 Mac 克罗地亚文", &tables::MAC_CROATIAN),
+    // ---------- 传统 / 特殊：其它 ----------
     custom_entry("us-ascii", "US-ASCII", &["ascii"], Group::Legacy, "7 位，>0x7F 报错", custom::ASCII),
 ];
 
@@ -185,7 +239,7 @@ pub fn find(query: &str) -> Option<&'static EncodingInfo> {
 pub fn by_ers(enc: &'static ers::Encoding) -> Option<&'static EncodingInfo> {
     LIST.iter().find(|e| match e.codec {
         Codec::Ers(e_enc) => std::ptr::eq(e_enc, enc),
-        Codec::Custom(_) => false,
+        Codec::Custom(_) | Codec::Table(_) => false,
     })
 }
 
@@ -214,6 +268,7 @@ pub fn decode(info: &EncodingInfo, bytes: &[u8]) -> DecodeResult {
     match info.codec {
         Codec::Ers(enc) => decode_ers(enc, bytes),
         Codec::Custom(codec) => codec.decode(bytes),
+        Codec::Table(table) => table_codec::decode_table(table, bytes),
     }
 }
 
@@ -266,6 +321,7 @@ pub fn encode(info: &EncodingInfo, text: &str) -> EncodeResult {
     match info.codec {
         Codec::Ers(enc) => encode_ers(enc, text),
         Codec::Custom(codec) => codec.encode(text),
+        Codec::Table(table) => table_codec::encode_table(table, text),
     }
 }
 
@@ -299,6 +355,7 @@ pub fn encode_lenient(info: &EncodingInfo, text: &str) -> Vec<u8> {
             out.shrink_to_fit();
             out
         }
+        Codec::Table(table) => table_codec::encode_table(table, text).bytes,
     }
 }
 
@@ -322,9 +379,25 @@ mod tests {
     }
 
     #[test]
-    fn missing_encodings_are_not_listed() {
-        // 表驱动编码尚未实现时不应出现在注册表里，避免界面给出“已支持”的错误信号
-        assert!(find("cp437").is_none());
+    fn table_codecs_are_registered() {
+        let cp437 = find("ibm437").expect("CP437 应已注册");
+        assert_eq!(decode(cp437, &[0x82]).text, "é");
+        assert_eq!(encode(cp437, "é").bytes, vec![0x82]);
+
+        let ebcdic = find("cp037").expect("EBCDIC 037 应已注册");
+        assert_eq!(decode(ebcdic, &[0xC1, 0xC2, 0xC3]).text, "ABC");
+
+        let mac = find("macthai").expect("MacThai 应已注册");
+        assert_eq!(mac.id, "mac-thai");
+
+        // 表驱动编码都能往返自己声明的字节
+        for id in ["cp850", "cp852", "cp866", "ebcdic-1047", "mac-turkish"] {
+            let info = find(id).unwrap_or_else(|| panic!("缺少编码 {id}"));
+            let text = decode(info, &(0u8..=255).collect::<Vec<u8>>()).text;
+            let encoded = encode(info, &text);
+            assert!(encoded.unmappable.is_empty(), "{id} 反查表不完整");
+            assert_eq!(decode(info, &encoded.bytes).text, text, "{id} 往返失败");
+        }
     }
 
     #[test]

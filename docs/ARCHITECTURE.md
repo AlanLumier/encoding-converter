@@ -23,11 +23,17 @@ src/
 │   ├── morse.rs       # 摩尔斯电码
 │   ├── charset/       # 编码注册表与 codec 实现
 │   │   ├── mod.rs     # EncodingInfo 列表、find/decode/encode
-│   │   └── custom.rs  # 自研 codec
+│   │   ├── custom.rs  # 自研 codec（UTF-32/UTF-7/CESU-8 等）
+│   │   ├── table_codec.rs  # 表驱动单字节代码页的编解码
+│   │   └── tables.rs  # 生成的单字节映射表（勿手改）
 │   └── detect.rs      # 编码探测
 └── batch.rs           # 批量任务执行（读文件 → 探测 → 转码 → 写文件），
                        # 提供 run（同步，CLI 用）与 spawn（后台线程 + channel，GUI 用）
 ```
+
+工具脚本：
+
+- `tools/gen-codepage-tables.ps1`：用 Windows 自带代码页数据生成 `tables.rs`（仅在新增编码时需要跑）。
 
 ## 核心接口约定
 
@@ -54,6 +60,6 @@ src/
 | 批量转码后台线程化 | ✅ 已完成（spawn + channel，UI 不阻塞） |
 | 界面重做 | ✅ 已完成（渐变背景、侧边导航、实时转换、拖拽区） |
 | 设置持久化 | ✅ 已完成（settings.json 自动保存/恢复） |
-| 表驱动传统编码（OEM/EBCDIC/老 Mac 等） | ⬜ 规划中 |
+| 表驱动传统编码（OEM/EBCDIC/老 Mac 等） | ✅ 已完成（29 种；表由 `tools/gen-codepage-tables.ps1` 生成） |
 | UTF-7 / SCSU / BOCU-1 / HZ-GB-2312 等 | ⬜ 规划中 |
 

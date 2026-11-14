@@ -16,6 +16,7 @@ Base16、Base32、Base32hex、z-base-32、Crockford Base32、Base58（Bitcoin/Fl
 **字符编码**
 - encoding_rs 全量 WHATWG 编码表：UTF-8、UTF-16LE/BE、GBK、GB18030、Big5、Shift_JIS、EUC-JP、ISO-2022-JP、EUC-KR、Windows-1250–1258、Windows-874、ISO-8859-2…16、KOI8-R/U、MacRoman、MacCyrillic、IBM866
 - 自研编码器：UTF-32LE/BE（含自动 BOM）、UCS-2LE/BE、CESU-8、Modified UTF-8、WTF-8、ISO-8859-1（真 Latin-1）、US-ASCII
+- 表驱动单字节代码页（`tools/gen-codepage-tables.ps1` 生成）：DOS OEM 的 CP437/720/737/775/850/852/855/857/858/860/861/862/863/864/865/869、EBCDIC 037/500/1047、老 Mac 的 Arabic/Hebrew/Greek/Romanian/Ukrainian/Thai/CentralEurope/Icelandic/Turkish/Croatian
 - 文本 ⇄ 字节双向转换，字节十六进制视图，BOM 输出选项，错误字节偏移提示
 
 **转义 / 传输编码**
@@ -38,7 +39,7 @@ BOM → ASCII → 无 BOM UTF-16 特征 → UTF-8 校验 → chardetng 统计模
 
 ## 尚未实现（规划中）
 
-- 表驱动的传统单字节编码：DOS OEM（CP437/850/852…）、EBCDIC、MacJapanese/MacKorean、VISCII、TCVN 等
+- MacJapanese / MacKorean（双字节老 Mac 编码）、VISCII / TCVN / TSCII / ISCII 等地区编码
 - UTF-7、SCSU、BOCU-1、ISO-2022-CN、HZ-GB-2312、EUC-TW、Johab
 - 批量转码暂不支持“暂停/取消”，只展示进度
 

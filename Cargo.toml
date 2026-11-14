@@ -1,0 +1,19 @@
+[package]
+name = "encoding-converter"
+version = "0.1.0"
+edition = "2021"
+description = "进制 / Base-N / 字符编码转换器（Windows & Linux 桌面工具）"
+license = "MIT"
+
+[dependencies]
+anyhow = "1.0.104"
+chardetng = "1.0.0"
+eframe = "0.37.0"
+encoding_rs = "0.8.44"
+rfd = "0.18.0"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

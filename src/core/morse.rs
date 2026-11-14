@@ -118,25 +118,31 @@ pub fn encode(text: &str) -> String {
 pub fn decode(input: &str) -> Result<String, String> {
     let mut out = String::new();
     let mut word_break = false;
-    for (index, token) in input.split_whitespace().enumerate() {
-        let position = index + 1;
-        if token == "/" {
-            // 单词分隔符只记账，等真正读出下一个字母时再落一个空格，
-            // 这样首尾多余的 `/` 不会产生前导/尾随空格。
-            word_break = true;
-            continue;
+    let mut position = 0usize;
+    for token in input.split_whitespace() {
+        // 单词分隔符只记账，等真正读出下一个字母时再落一个空格，
+        // 这样首尾多余的 `/` 不会产生前导/尾随空格。
+        // 顺带兼容 `..../-..-` 这种 `/` 两侧没有空格的写法。
+        for (segment_index, segment) in token.split('/').enumerate() {
+            if segment_index > 0 {
+                word_break = true;
+            }
+            if segment.is_empty() {
+                continue;
+            }
+            position += 1;
+            let symbol = char_of(segment).ok_or_else(|| {
+                format!(
+                    "摩尔斯解码失败：第 {} 个码组「{}」不在国际摩尔斯表中",
+                    position, segment
+                )
+            })?;
+            if !out.is_empty() && word_break {
+                out.push(' ');
+            }
+            out.push(symbol);
+            word_break = false;
         }
-        let symbol = char_of(token).ok_or_else(|| {
-            format!(
-                "摩尔斯解码失败：第 {} 个码组「{}」不在国际摩尔斯表中",
-                position, token
-            )
-        })?;
-        if !out.is_empty() && word_break {
-            out.push(' ');
-        }
-        out.push(symbol);
-        word_break = false;
     }
     Ok(out)
 }
@@ -210,6 +216,10 @@ mod tests {
         // 多个分隔符只算一次；首尾分隔符不产生多余空格。
         assert_eq!(decode("/ ... / / --- /").as_deref(), Ok("S O"));
         assert_eq!(decode("...\t---").as_deref(), Ok("SO"), "制表符也可作分隔");
+        // `/` 两侧即使没有空格也要能识别出单词分隔。
+        assert_eq!(decode("..../-..-").as_deref(), Ok("H X"), "'/' 两侧没有空格也表示单词分隔");
+        assert_eq!(decode("./-").as_deref(), Ok("E T"), "斜杠紧贴码组");
+        assert_eq!(decode("-..-./.----").as_deref(), Ok("/ 1"));
     }
 
     #[test]
@@ -226,6 +236,6 @@ mod tests {
         assert!(err.contains("第 2 个码组"), "错误信息应指出位置：{err}");
         assert!(decode(".......").is_err());
         assert!(decode("... x ...").is_err());
-        assert!(decode(".-/.-").is_err(), "粘连的码组不是合法输入");
+        assert!(decode(".-/x").is_err(), "斜杠分隔后仍有非法码组时要报错");
     }
 }

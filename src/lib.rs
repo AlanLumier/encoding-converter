@@ -22,6 +22,11 @@ pub mod cli {
     use crate::core::detect;
 
     pub fn run(args: &[String]) -> anyhow::Result<()> {
+        // 子命令也接受 --help，避免把帮助参数当成文件路径
+        if args.len() > 1 && args.iter().any(|a| a == "-h" || a == "--help") {
+            print_help();
+            return Ok(());
+        }
         match args.first().map(String::as_str) {
             Some("-h" | "--help" | "help") => {
                 print_help();
@@ -119,6 +124,7 @@ pub mod cli {
                 let mut to = String::from("utf-8");
                 let mut out_dir: Option<PathBuf> = None;
                 let mut inputs: Vec<PathBuf> = Vec::new();
+                let mut overwrite = false;
                 let mut index = 1;
                 while index < args.len() {
                     match args[index].as_str() {
@@ -130,6 +136,10 @@ pub mod cli {
                             out_dir = args.get(index + 1).map(PathBuf::from);
                             index += 2;
                         }
+                        "--overwrite" => {
+                            overwrite = true;
+                            index += 1;
+                        }
                         other => {
                             inputs.push(PathBuf::from(other));
                             index += 1;
@@ -137,7 +147,9 @@ pub mod cli {
                     }
                 }
                 if inputs.is_empty() {
-                    anyhow::bail!("用法：batch --to <编码> [--out 目录] <文件或目录>…");
+                    anyhow::bail!(
+                        "用法：batch --to <编码> [--out 目录] [--overwrite] <文件或目录>…"
+                    );
                 }
                 let target = charset::find(&to).ok_or_else(|| anyhow::anyhow!("未知编码：{to}"))?;
                 let mut items = batch::scan(&inputs, true);
@@ -145,7 +157,7 @@ pub mod cli {
                     target,
                     source: SourceEncoding::Auto,
                     output_dir: out_dir,
-                    overwrite: true,
+                    overwrite,
                     ..BatchOptions::default()
                 };
                 let total = items.len();
@@ -153,13 +165,26 @@ pub mod cli {
                     eprintln!("[{done}/{total}]");
                 });
                 let mut failed = 0;
+                let mut skipped = 0;
                 for item in &items {
-                    if item.status == ItemStatus::Failed {
-                        failed += 1;
-                        eprintln!("失败：{} — {}", item.path.display(), item.message);
+                    match item.status {
+                        ItemStatus::Failed => {
+                            failed += 1;
+                            eprintln!("失败：{} — {}", item.path.display(), item.message);
+                        }
+                        ItemStatus::Skipped => {
+                            skipped += 1;
+                            eprintln!("跳过：{} — {}", item.path.display(), item.message);
+                        }
+                        _ => {}
                     }
                 }
-                println!("完成 {} 个文件，失败 {} 个", total - failed, failed);
+                println!(
+                    "完成 {} 个文件，跳过 {} 个，失败 {} 个",
+                    total - failed - skipped,
+                    skipped,
+                    failed
+                );
                 if failed > 0 {
                     anyhow::bail!("有 {failed} 个文件失败");
                 }
@@ -186,12 +211,13 @@ pub mod cli {
   encoding-converter detect <文件>   显示编码探测结果
   encoding-converter convert --from <编码> --to <编码> <文件> [-o 输出]
                                      （--from 省略时自动探测）
-  encoding-converter batch --to <编码> [--out 目录] <文件或目录>…
+  encoding-converter batch --to <编码> [--out 目录] [--overwrite] <文件或目录>…
   encoding-converter --help          显示帮助
 
 示例：
   encoding-converter convert --from gbk --to utf-8 note.txt -o note.utf8.txt
   encoding-converter batch --to utf-8 --out ./utf8 ./downloads
+  encoding-converter batch --to utf-8 --out ./utf8 --overwrite ./downloads
 "#,
             env!("CARGO_PKG_VERSION")
         );

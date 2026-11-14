@@ -67,12 +67,15 @@ cargo build --release
 encoding-converter detect note.txt
 encoding-converter convert --from gbk --to utf-8 note.txt -o note.utf8.txt
 encoding-converter batch --to utf-8 --out ./utf8 ./downloads
+encoding-converter batch --to utf-8 --out ./utf8 --overwrite ./downloads   # 覆盖已存在的输出
 ```
+
+`batch` 默认**不覆盖**已存在的输出文件（会显示为“跳过”），需要覆盖时显式加 `--overwrite`。
 
 ## 本地存储
 
 - 当前版本**不写配置文件、不联网、不上报任何数据**。
-- 批量转码只写入用户指定的输出目录（或原目录的副本），覆盖已有文件必须显式勾选。
+- 批量转码只写入用户指定的输出目录（或原目录的副本）；GUI 覆盖已有文件需显式勾选，CLI 需显式加 `--overwrite`。
 - 计划中的设置持久化会写到系统配置目录（`~/.config/encoding-converter/settings.json`），当前尚未实现。
 
 ## 开发约定

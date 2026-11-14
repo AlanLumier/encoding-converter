@@ -3,6 +3,7 @@
 pub mod app;
 pub mod batch;
 pub mod core;
+pub mod settings;
 
 /// 程序入口：无参数启动 GUI；带参数走 CLI。
 pub fn run() -> anyhow::Result<()> {

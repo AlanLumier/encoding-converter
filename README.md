@@ -25,7 +25,13 @@ URL 百分号、HTML 实体、HTML 数字引用（十进制/十六进制）、JS
 BOM → ASCII → 无 BOM UTF-16 特征 → UTF-8 校验 → chardetng 统计模型，输出候选列表与置信度
 
 **批量文件转码**
-拖拽文件/文件夹进窗口加入队列，自动探测或指定源编码，按目标编码批量转码；支持输出目录、后缀、覆盖开关、试运行、BOM 保留，逐文件状态与汇总
+拖拽文件/文件夹进窗口加入队列，自动探测或指定源编码，按目标编码批量转码；支持输出目录、后缀、覆盖开关、试运行、BOM 保留，逐文件状态与汇总。转码在**后台线程**执行，进度条实时刷新，界面不卡顿。
+
+**界面**
+- 薄荷绿 → 樱花粉渐变背景（#D0FDF8 → #FFC5CE）+ 白色毛玻璃卡片 + 左侧导航
+- 新手友好：默认停在「文本编码转换」，输入即出结果，不需要点“执行”
+- 拖入文件自动跳到批量页；底部状态栏实时提示
+- 设置自动保存：页签、编码选择、进制、批量选项等下次启动自动恢复
 
 **命令行**
 `detect` / `convert` / `batch` 三个子命令，便于脚本调用
@@ -34,8 +40,7 @@ BOM → ASCII → 无 BOM UTF-16 特征 → UTF-8 校验 → chardetng 统计模
 
 - 表驱动的传统单字节编码：DOS OEM（CP437/850/852…）、EBCDIC、MacJapanese/MacKorean、VISCII、TCVN 等
 - UTF-7、SCSU、BOCU-1、ISO-2022-CN、HZ-GB-2312、EUC-TW、Johab
-- 批量转码目前在 UI 线程同步执行，大文件时会阻塞刷新（后续改为后台线程 + 进度回调）
-- 界面设置持久化（保存上次使用的编码）
+- 批量转码暂不支持“暂停/取消”，只展示进度
 
 ## 打开方式
 
@@ -74,9 +79,12 @@ encoding-converter batch --to utf-8 --out ./utf8 --overwrite ./downloads   # 覆
 
 ## 本地存储
 
-- 当前版本**不写配置文件、不联网、不上报任何数据**。
+- **不联网、不上报任何数据**。
+- 界面设置自动保存到系统配置目录，只存页签与编码选择等少量字段：
+  - Windows：`%APPDATA%\encoding-converter\settings.json`
+  - Linux：`$XDG_CONFIG_HOME/encoding-converter/settings.json`（缺省 `~/.config/...`）
+  - 可用环境变量 `ENCODING_CONVERTER_CONFIG_DIR` 指定目录
 - 批量转码只写入用户指定的输出目录（或原目录的副本）；GUI 覆盖已有文件需显式勾选，CLI 需显式加 `--overwrite`。
-- 计划中的设置持久化会写到系统配置目录（`~/.config/encoding-converter/settings.json`），当前尚未实现。
 
 ## 开发约定
 

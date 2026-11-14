@@ -13,24 +13,20 @@
 ```
 src/
 ├── main.rs            # 入口：无参数启动 GUI；带参数走 CLI
-├── app.rs             # egui 主界面与状态
-├── ui/                # 各功能页
-│   ├── radix.rs       # 进制转换页
-│   ├── base.rs        # Base-N 编码页
-│   ├── charset.rs     # 字符编码页
-│   ├── batch.rs       # 批量文件转码页（拖拽）
-│   └── detect.rs      # 编码探测页
+├── app.rs             # egui 主界面（渐变背景、侧边导航、六个页面）
+├── settings.rs        # 设置持久化（扁平 JSON，无 serde 依赖）
 ├── core/
 │   ├── radix.rs       # 任意进制 2-36、补码、浮点位视图
 │   ├── numeral.rs     # 特殊数制：罗马、六十进制、双射 26、平衡三进制等
-│   ├── base_n.rs      # Base16/32/58/62/64/85/91、Bech32
+│   ├── base_n.rs      # Base16/32/58/62/64/85/91 等 18 种
 │   ├── escape.rs      # URL/HTML/Unicode/JSON 转义
 │   ├── morse.rs       # 摩尔斯电码
 │   ├── charset/       # 编码注册表与 codec 实现
 │   │   ├── mod.rs     # EncodingInfo 列表、find/decode/encode
 │   │   └── custom.rs  # 自研 codec
 │   └── detect.rs      # 编码探测
-└── batch.rs           # 批量任务执行（读文件 → 探测 → 转码 → 写文件）
+└── batch.rs           # 批量任务执行（读文件 → 探测 → 转码 → 写文件），
+                       # 提供 run（同步，CLI 用）与 spawn（后台线程 + channel，GUI 用）
 ```
 
 ## 核心接口约定
@@ -55,7 +51,9 @@ src/
 | 自研 codec | ✅ 已完成（UTF-32/UCS-2/CESU-8/MUTF-8/WTF-8/Latin-1/ASCII） |
 | 自动编码探测 | ✅ 已完成（BOM + UTF-16 特征 + chardetng 打分） |
 | 批量文件转码 | ✅ 已完成（拖拽、探测、输出目录、试运行） |
-| 表驱动传统编码（OEM/EBCDIC 等） | ⬜ 规划中 |
+| 批量转码后台线程化 | ✅ 已完成（spawn + channel，UI 不阻塞） |
+| 界面重做 | ✅ 已完成（渐变背景、侧边导航、实时转换、拖拽区） |
+| 设置持久化 | ✅ 已完成（settings.json 自动保存/恢复） |
+| 表驱动传统编码（OEM/EBCDIC/老 Mac 等） | ⬜ 规划中 |
 | UTF-7 / SCSU / BOCU-1 / HZ-GB-2312 等 | ⬜ 规划中 |
-| 批量转码后台线程化 | ⬜ 规划中 |
 

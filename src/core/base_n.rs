@@ -69,9 +69,10 @@ const RFC1924_ALPHABET: &[u8] =
 /// basE91 官方字母表（末尾是双引号）。
 const BASE91_ALPHABET: &[u8] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,./:;<=>?@[]^_`{|}~\"";
-/// xxencode 字母表：Base64 字母表把最后两个字符换成 `+ -`。
+/// xxencode 字母表：按 ASCII 顺序排列（`+` `-` 在 0-9A-Za-z 之前）。
+/// 它最大的特点是“整行都落在字母表内”，连行首的长度字符也取自这张表。
 const XXENCODE_ALPHABET: &[u8] =
-    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-";
+    b"+-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
 /// Adobe ASCII85 的 85 个字符就是 ASCII 33..=117（`!`..=`u`），用 const fn 生成，
 /// 避免手写 85 个转义字符时漏掉 `"` 或反斜杠。
@@ -180,7 +181,7 @@ impl BaseN {
             BaseN::Rfc1924 => "RFC 1924 Base85：4 字节 → 5 字符（大端 u32），末组补零截断",
             BaseN::Base91 => "basE91 位累加器算法，约 1.23 字节/字符，无填充",
             BaseN::Uuencode => "经典数据行（行首长度字符 + 每 3 字节 4 字符），零值用 '`'，末尾 '`' 收尾",
-            BaseN::Xxencode => "与 uuencode 同构，换用 xxencode 64 字符字母表，末尾 '`' 收尾",
+            BaseN::Xxencode => "与 uuencode 同构，字母表为 +-0-9A-Za-z；行首长度字符同样取自该表（0 即 '+'），末尾 '+' 收尾",
         }
     }
 
@@ -874,9 +875,13 @@ fn uuencode_data_char(value: u8) -> char {
     }
 }
 
-/// 行首长度字符：字节数 + 32（0 行统一写成 '`' 收尾，解码端同样兼容空格）。
-fn line_length_char(bytes: usize) -> char {
-    if bytes == 0 {
+/// 行首长度字符。uuencode 用“字节数 + 32”，0 写成 '`' 收尾；
+/// xxencode 则直接把字节数当作 64 字母表的下标（0 即 '+'），
+/// 这样整行都不会出现空格或反引号——这正是两套编码“行首字符不同”的来源。
+fn line_length_char(bytes: usize, xx: bool) -> char {
+    if xx {
+        XXENCODE_ALPHABET[bytes] as char
+    } else if bytes == 0 {
         '`'
     } else {
         (bytes as u8 + 0x20) as char
@@ -887,7 +892,7 @@ fn encode_line_based(data: &[u8], xx: bool) -> String {
     let mut lines: Vec<String> = Vec::with_capacity(data.len() / 45 + 1);
     for chunk in data.chunks(45) {
         let mut line = String::with_capacity(1 + 60);
-        line.push(line_length_char(chunk.len()));
+        line.push(line_length_char(chunk.len(), xx));
         for group in chunk.chunks(3) {
             let mut block = [0u8; 3];
             block[..group.len()].copy_from_slice(group);
@@ -904,33 +909,52 @@ fn encode_line_based(data: &[u8], xx: bool) -> String {
         }
         lines.push(line);
     }
-    // 经典格式里数据段以一行 '`'（长度 0）结束。
-    lines.push("`".to_string());
+    // 经典格式里数据段以一行“长度 0”结束：uuencode 写 '`'，xxencode 写 '+'。
+    lines.push(line_length_char(0, xx).to_string());
     lines.join("\n")
 }
 
 fn decode_line_based(text: &str, xx: bool) -> Result<Vec<u8>, String> {
     let label = if xx { "xxencode" } else { "uuencode" };
     let mut out = Vec::with_capacity(text.len());
+    let mut seen_data = false;
     for (line_no, raw) in text.split('\n').enumerate() {
         let line = raw.trim_end_matches('\r');
         if line.is_empty() {
             continue;
         }
         // 允许直接粘贴带 begin/end 的完整文件，但二者本身不含数据。
-        if line.starts_with("begin ") || line == "end" || line == "begin" {
+        // 只有还没读到数据行时才把 begin 当头部，避免误跳过真正的数据行。
+        if !seen_data && (line.starts_with("begin ") || line == "begin") {
             continue;
+        }
+        if line == "end" {
+            break;
         }
         let bytes = line.as_bytes();
         let length_char = bytes[0];
-        if !((0x20..=0x5F).contains(&length_char) || length_char == 0x60) {
-            return Err(format!(
-                "{label} 解码失败：第 {} 行的长度字符 {:#04X} 非法（应为 0x20..=0x60）",
-                line_no + 1,
-                length_char
-            ));
-        }
-        let count = (length_char as usize - 0x20) & 0x3F;
+        let count = if xx {
+            // xxencode 的长度字符同样来自字母表，'+' 表示 0。
+            match lookup_byte(XXENCODE_ALPHABET, length_char as char) {
+                Some(value) => value as usize,
+                None => {
+                    return Err(format!(
+                        "{label} 解码失败：第 {} 行的长度字符 '{}' 不在 xxencode 字母表中",
+                        line_no + 1,
+                        length_char as char
+                    ))
+                }
+            }
+        } else {
+            if !((0x20..=0x5F).contains(&length_char) || length_char == 0x60) {
+                return Err(format!(
+                    "{label} 解码失败：第 {} 行的长度字符 {:#04X} 非法（应为 0x20..=0x60）",
+                    line_no + 1,
+                    length_char
+                ));
+            }
+            (length_char as usize - 0x20) & 0x3F
+        };
         if count == 0 {
             break; // 长度 0 的行表示数据段结束
         }
@@ -981,6 +1005,7 @@ fn decode_line_based(text: &str, xx: bool) -> Result<Vec<u8>, String> {
         }
         decoded.truncate(count);
         out.extend_from_slice(&decoded);
+        seen_data = true;
     }
     Ok(out)
 }
@@ -1131,8 +1156,10 @@ mod tests {
             (BaseN::Base91, b"hello world", "TPwJh>Io2Tv!lE"),
             (BaseN::Uuencode, b"Cat", "#0V%T\n`"),
             (BaseN::Uuencode, b"hello\n", "&:&5L;&\\*\n`"),
-            (BaseN::Xxencode, b"Cat", "#Q2F0\n`"),
-            (BaseN::Xxencode, b"foobar", "&Zm9vYmFy\n`"),
+            (BaseN::Xxencode, b"", "+"),
+            (BaseN::Xxencode, b"\x00", "-++++\n+"),
+            (BaseN::Xxencode, b"Cat", "1Eq3o\n+"),
+            (BaseN::Xxencode, b"foobar", "4NaxjMa3m\n+"),
         ];
         for (kind, input, expected) in cases {
             assert_eq!(
@@ -1199,6 +1226,7 @@ mod tests {
         }
         assert_eq!(BaseN::Ascii85.encode(b""), "<~~>");
         assert_eq!(BaseN::Uuencode.encode(b""), "`");
+        assert_eq!(BaseN::Xxencode.encode(b""), "+");
     }
 
     #[test]
@@ -1341,25 +1369,51 @@ mod tests {
     #[test]
     fn line_based_encodings_wrap_at_45_bytes_and_tolerate_headers() {
         let data = vec![b'a'; 100];
+
+        // ---- uuencode：行首字符 = 字节数 + 32，收尾行 '`' ----
         let encoded = BaseN::Uuencode.encode(&data);
         let lines: Vec<&str> = encoded.split('\n').collect();
         assert_eq!(lines.len(), 4, "100 字节应切成 45/45/10 三行 + 收尾行");
         assert_eq!(lines[3], "`");
         assert_eq!(lines[0].len(), 1 + 60);
         assert_eq!(lines[2].len(), 1 + 16);
+        assert_eq!(lines[0].as_bytes()[0], 45 + 32, "uuencode 长度字符 = 字节数 + 32");
         assert_eq!(BaseN::Uuencode.decode(&encoded), Ok(data.clone()));
 
-        // 直接粘贴带 begin/end 的完整 uuencode 文本也能解。
-        let wrapped = format!("begin 644 demo.txt\n{}`\nend\n", encoded.trim_end_matches('`'));
-        let wrapped = wrapped.replace("`\n`", "`");
+        // ---- xxencode：行首字符同样取自 64 字母表，收尾行 '+' ----
+        let encoded_xx = BaseN::Xxencode.encode(&data);
+        let xx_lines: Vec<&str> = encoded_xx.split('\n').collect();
+        assert_eq!(xx_lines.len(), 4);
+        assert_eq!(xx_lines[3], "+");
+        assert_eq!(xx_lines[0].len(), 1 + 60);
         assert_eq!(
-            BaseN::Uuencode.decode(&wrapped),
+            xx_lines[0].as_bytes()[0], XXENCODE_ALPHABET[45],
+            "xxencode 长度字符是字母表下标"
+        );
+        assert_eq!(BaseN::Xxencode.decode(&encoded_xx), Ok(data.clone()));
+
+        // 同一份数据，两种编码的行首字符必然不同（定义性差异）。
+        assert_ne!(
+            BaseN::Uuencode.encode(b"Cat").as_bytes()[0],
+            BaseN::Xxencode.encode(b"Cat").as_bytes()[0]
+        );
+
+        // 直接粘贴带 begin/end 的完整文件也能解（两种编码都接受）。
+        let uu_body = lines[..lines.len() - 1].join("\n");
+        let uu_wrapped = format!("begin 644 demo.txt\n{uu_body}\nend\n");
+        assert_eq!(
+            BaseN::Uuencode.decode(&uu_wrapped),
             Ok(data.clone()),
             "带 begin/end 头尾时应能正常解码"
         );
+        let xx_body = xx_lines[..xx_lines.len() - 1].join("\n");
+        let xx_wrapped = format!("begin 644 demo.txt\n{xx_body}\nend\n");
+        assert_eq!(BaseN::Xxencode.decode(&xx_wrapped), Ok(data.clone()));
 
-        // 经典编码器用空格表示 0，我们的解码也必须接受。
+        // 经典 uuencode 编码器用空格表示 0，我们的解码也必须接受。
         assert_eq!(BaseN::Uuencode.decode("!    \n`"), Ok(vec![0]));
+        // xxencode 里 0 就是字母表首字符 '+'。
+        assert_eq!(BaseN::Xxencode.decode("-++++\n+"), Ok(vec![0]));
     }
 
     #[test]
